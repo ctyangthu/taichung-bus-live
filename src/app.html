@@ -1,0 +1,721 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>台中公車動態</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{
+  --bg:#f4f6f5; --panel:#fff; --ink:#17211d; --mute:#63706a; --line:#dfe5e2;
+  --brand:#0d6b4f; --brand-ink:#fff; --soft:#e8f3ee;
+  --d0:#1b6fd8; --d1:#e0621f; --warn:#b45309; --warn-bg:#fff4e0; --bad:#b42318;
+  --live:#0f9960;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:14px/1.5 -apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;color:var(--ink);background:var(--bg);display:flex;flex-direction:column;overflow:hidden}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+header{background:var(--brand);color:var(--brand-ink);display:flex;align-items:center;gap:10px;padding:8px 12px;flex-wrap:wrap}
+header h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.02em;white-space:nowrap}
+.seg{display:inline-flex;background:rgba(255,255,255,.16);border-radius:8px;padding:2px}
+.seg button{border:0;background:transparent;color:inherit;padding:4px 10px;border-radius:6px;white-space:nowrap}
+.seg button[aria-pressed=true]{background:#fff;color:var(--brand);font-weight:600}
+.chip{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.16);border-radius:999px;padding:3px 10px;font-size:13px;white-space:nowrap}
+.chip .dot{width:8px;height:8px;border-radius:50%;background:#9be7c4}
+.chip.stale .dot{background:#ffc94d}.chip.err .dot{background:#ff8a80}
+.hbtn{border:0;background:rgba(255,255,255,.16);color:inherit;border-radius:8px;padding:4px 10px;white-space:nowrap}
+.hbtn:hover{background:rgba(255,255,255,.28)}
+.sp{flex:1}
+#clock{font-variant-numeric:tabular-nums;font-size:13px;white-space:nowrap}
+#wrap{flex:1;display:flex;min-height:0}
+#side{width:370px;max-width:100%;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+#map{flex:1;min-width:0;background:#e9eeec}
+.leaflet-tile-pane{filter:saturate(.55) brightness(1.04)}
+.tabs{display:flex;border-bottom:1px solid var(--line)}
+.tabs button{flex:1;border:0;background:none;padding:10px 4px;color:var(--mute);border-bottom:2px solid transparent}
+.tabs button[aria-selected=true]{color:var(--brand);border-bottom-color:var(--brand);font-weight:600}
+.pane{flex:1;overflow:auto;min-height:0;display:none}
+.pane.on{display:block}
+.search{position:sticky;top:0;background:var(--panel);padding:10px 12px;border-bottom:1px solid var(--line);z-index:2}
+.search input{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.search input:focus{outline:2px solid var(--brand);outline-offset:-1px;background:#fff}
+.hint{color:var(--mute);font-size:12.5px;padding:8px 12px}
+.item{display:flex;gap:10px;align-items:center;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:none;padding:9px 12px}
+.item:hover{background:var(--soft)}
+.badge{flex:none;min-width:52px;text-align:center;background:var(--brand);color:#fff;border-radius:6px;padding:2px 6px;font-weight:700;font-size:13px}
+.badge.long{font-size:11.5px;max-width:110px;white-space:normal;line-height:1.25}
+.item .sub{color:var(--mute);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .main{min-width:0;flex:1}
+.item .right{flex:none;font-variant-numeric:tabular-nums;font-size:13px;color:var(--brand);font-weight:600;text-align:right}
+.item .right small{display:block;color:var(--mute);font-weight:400}
+.rhead{padding:10px 12px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:2}
+.rhead .top{display:flex;align-items:center;gap:8px}
+.back{border:1px solid var(--line);background:#fff;border-radius:8px;padding:3px 9px}
+.rhead h2{margin:0;font-size:20px}
+.rhead .ft{color:var(--mute);font-size:12.5px;margin-top:2px}
+.dirs{display:flex;gap:6px;margin-top:8px}
+.dirs button{flex:1;border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 8px;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dirs button[aria-pressed=true]{color:#fff;font-weight:600;border-color:transparent}
+.dirs button[data-d="0"][aria-pressed=true]{background:var(--d0)}
+.dirs button[data-d="1"][aria-pressed=true]{background:var(--d1)}
+.sect{padding:8px 12px 2px;font-weight:600;font-size:13px;color:var(--mute);display:flex;align-items:center;gap:8px}
+.sect .sp{flex:1}
+.sect select{border:1px solid var(--line);border-radius:6px;padding:1px 4px;background:#fff;font-weight:400}
+.note{margin:6px 12px;padding:6px 10px;background:var(--warn-bg);color:var(--warn);border-radius:8px;font-size:12.5px}
+ol.stops{list-style:none;margin:0;padding:4px 0 8px}
+ol.stops li{display:grid;grid-template-columns:74px 18px 1fr;align-items:center;padding:0 12px 0 8px;min-height:34px;cursor:pointer}
+ol.stops li:hover{background:var(--soft)}
+ol.stops .eta{justify-self:end;font-variant-numeric:tabular-nums;font-size:12.5px;padding:1px 7px;border-radius:999px;background:var(--bg);color:var(--mute);white-space:nowrap}
+ol.stops .eta.soon{background:#fde8e6;color:var(--bad);font-weight:700}
+ol.stops .eta.near{background:var(--soft);color:var(--brand);font-weight:600}
+ol.stops .rail{justify-self:center;align-self:stretch;width:2px;background:var(--rc,var(--d0));position:relative}
+ol.stops li:first-child .rail{margin-top:17px}
+ol.stops li:last-child .rail{margin-bottom:17px}
+ol.stops .rail::after{content:"";position:absolute;left:-4px;top:calc(50% - 5px);width:10px;height:10px;border-radius:50%;background:#fff;border:2px solid var(--rc,var(--d0))}
+ol.stops li:first-child .rail::after{top:-5px}
+ol.stops li:last-child .rail::after{top:auto;bottom:-5px}
+ol.stops .nm{padding:6px 0 6px 6px}
+ol.stops .bus{display:inline-block;margin-left:6px;background:var(--rc,var(--d0));color:#fff;border-radius:5px;padding:0 6px;font-size:11.5px;font-weight:600;white-space:nowrap}
+.times{display:grid;grid-template-columns:repeat(auto-fill,minmax(52px,1fr));gap:4px;padding:6px 12px 14px;font-variant-numeric:tabular-nums}
+.times span{text-align:center;border-radius:6px;padding:2px 0;background:var(--bg);font-size:13px}
+.times span.past{color:#a9b3ae}
+.times span.next{background:var(--brand);color:#fff;font-weight:700}
+#timebar{display:none;align-items:center;gap:10px;padding:7px 12px;background:var(--panel);border-top:1px solid var(--line);flex-wrap:wrap}
+body.sim #timebar{display:flex}
+#timebar input[type=range]{flex:1;min-width:140px;accent-color:var(--brand)}
+#timebar button,#timebar select{border:1px solid var(--line);background:#fff;border-radius:8px;padding:3px 9px}
+#timebar button[aria-pressed=true]{background:var(--brand);color:#fff;border-color:var(--brand)}
+#simclock{font-variant-numeric:tabular-nums;font-weight:700;min-width:44px}
+#banner{display:none;background:var(--warn-bg);color:var(--warn);padding:6px 12px;font-size:13px;border-bottom:1px solid #f1d9ae}
+#banner.on{display:block}
+#banner button{border:0;background:none;color:inherit;text-decoration:underline;padding:0 2px}
+dialog{border:0;border-radius:14px;padding:0;max-width:440px;width:calc(100% - 32px);box-shadow:0 20px 60px rgba(0,0,0,.3)}
+dialog::backdrop{background:rgba(10,20,16,.45)}
+dialog form{padding:18px}
+dialog h3{margin:0 0 6px}
+dialog p{margin:6px 0;color:var(--mute);font-size:13px}
+dialog label{display:block;margin-top:10px;font-size:13px;font-weight:600}
+dialog input{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-top:3px;font-weight:400}
+dialog .row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+dialog .row button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 14px}
+dialog .row button.pri{background:var(--brand);color:#fff;border-color:var(--brand)}
+#keymsg{font-size:13px;margin-top:8px;min-height:1.4em}
+.leaflet-pane canvas.buscanvas{position:absolute;left:0;top:0;pointer-events:none;z-index:450}
+.leaflet-popup-content{margin:10px 12px;font:13px/1.5 inherit}
+.pop b{font-size:15px}.pop .m{color:var(--mute)}
+.pop button{margin-top:6px;border:1px solid var(--brand);background:var(--brand);color:#fff;border-radius:6px;padding:2px 10px}
+.legend{background:rgba(255,255,255,.92);border-radius:8px;padding:5px 9px;font-size:12px;box-shadow:0 1px 4px rgba(0,0,0,.2);line-height:1.6}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+@media (max-width:760px){
+  #wrap{flex-direction:column-reverse}
+  #side{width:100%;height:52%;border-right:0;border-top:1px solid var(--line)}
+  header h1{font-size:15px}
+  #clock{display:none}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>台中公車動態</h1>
+  <div class="seg" role="group" aria-label="資料模式">
+    <button id="m-gps" aria-pressed="true">GPS 即時</button>
+    <button id="m-sim" aria-pressed="false">時刻表推估</button>
+  </div>
+  <span class="chip" id="status"><span class="dot"></span><span id="statustext">載入中…</span></span>
+  <button class="hbtn" id="refresh" title="重新讀取公車 GPS 位置">更新 GPS</button>
+  <span class="sp"></span>
+  <span id="clock"></span>
+  <button class="hbtn" id="keybtn">TDX 金鑰</button>
+</header>
+<div id="banner"></div>
+<div id="wrap">
+  <aside id="side">
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="routes" aria-selected="true">路線</button>
+      <button role="tab" data-tab="stops" aria-selected="false">站牌</button>
+      <button role="tab" data-tab="buses" aria-selected="false">運行中</button>
+    </div>
+    <div class="pane on" id="p-routes">
+      <div id="routelist">
+        <div class="search"><input id="rq" type="search" placeholder="搜尋路線：300、綠1、東海…" autocomplete="off"></div>
+        <div id="rl"></div>
+      </div>
+      <div id="routedetail" hidden></div>
+    </div>
+    <div class="pane" id="p-stops">
+      <div class="search"><input id="sq" type="search" placeholder="搜尋站牌：臺中車站、東海別墅…" autocomplete="off"></div>
+      <div id="sl"><div class="hint">輸入站牌名稱，查看經過的路線與下一班車。</div></div>
+    </div>
+    <div class="pane" id="p-buses"></div>
+  </aside>
+  <div id="map"></div>
+</div>
+<div id="timebar">
+  <button id="t-now" aria-pressed="true">現在</button>
+  <select id="t-day" aria-label="班表"><option value="wk">平日班表</option><option value="we">假日班表</option></select>
+  <span id="simclock">--:--</span>
+  <input id="t-range" type="range" min="270" max="1500" step="1" aria-label="時間">
+  <button id="t-play">▶ 播放</button>
+  <select id="t-speed" aria-label="播放速度"><option value="60">60×</option><option value="300" selected>300×</option><option value="900">900×</option></select>
+</div>
+
+<dialog id="keydlg">
+  <form method="dialog">
+    <h3>TDX 金鑰</h3>
+    <p>公車 GPS 來自交通部 TDX。未登入時每個網路位址一天只能查詢 20 次，所以預設只在開啟頁面與按「更新 GPS」時讀取。</p>
+    <p>填入自己的 TDX 金鑰（<a href="https://tdx.transportdata.tw/" target="_blank" rel="noopener">TDX 會員中心</a> → 資料服務 → API 金鑰）後，車輛位置每 20 秒自動更新，選取的路線改用官方預估到站時間。金鑰只存在這個瀏覽器，只會傳給 TDX。</p>
+    <label>Client ID<input id="k-id" autocomplete="off" spellcheck="false"></label>
+    <label>Client Secret<input id="k-secret" type="password" autocomplete="off"></label>
+    <div id="keymsg"></div>
+    <div class="row">
+      <button type="button" id="k-clear">清除</button>
+      <button value="cancel">取消</button>
+      <button type="button" class="pri" id="k-save">儲存並測試</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+"use strict";
+const TDX = "https://tdx.transportdata.tw/api/basic/v2/Bus/";
+const TDX_AUTH = "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token";
+const KX = 111320 * Math.cos(24.15 * Math.PI / 180), KY = 110540;
+const POLL_MS = 20000, ETA_MS = 30000, STALE_MS = 120000, ANON_CACHE_MS = 300000;
+const $ = (s, el = document) => el.querySelector(s);
+function setHtml(el, html) { if (el._html === html) return false; el._html = html; el.innerHTML = html; return true; }
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+
+let DATA, routeById = new Map(), stopNames = new Map();
+const S = {
+  mode: "gps", sel: null, selDir: 0, tab: "routes",
+  gps: [], gpsAt: 0, gpsErr: "", fetching: false,
+  eta: null, etaKey: "",
+  simLive: true, simT: 0, simDay: "wk", playing: false,
+  buses: [], hiStop: -1,
+};
+
+/* ---------- 時間 ---------- */
+function taipei(d = new Date()) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Taipei", hourCycle: "h23", weekday: "short", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(d).map(x => [x.type, x.value]));
+  return { sec: +p.hour * 3600 + +p.minute * 60 + +p.second, dow: p.weekday, date: `${p.year}-${p.month}-${p.day}` };
+}
+const dayType = dow => (dow === "Sat" || dow === "Sun") ? "we" : "wk";
+const hhmm = min => { min = Math.floor(min); return String(Math.floor(min / 60) % 24).padStart(2, "0") + ":" + String(min % 60).padStart(2, "0"); };
+// 目前畫面採用的時間（秒）與班表種類
+function nowCtx() {
+  if (S.mode === "sim" && !S.simLive) return { sec: S.simT, day: S.simDay };
+  const t = taipei();
+  return { sec: t.sec, day: S.mode === "sim" ? S.simDay : dayType(t.dow) };
+}
+
+/* ---------- 線形 ---------- */
+function decode(str) {
+  const out = []; let i = 0, lat = 0, lon = 0;
+  while (i < str.length) {
+    for (const k of [0, 1]) {
+      let r = 0, s = 0, b;
+      do { b = str.charCodeAt(i++) - 63; r |= (b & 31) << s; s += 5; } while (b >= 32);
+      const v = (r & 1) ? ~(r >> 1) : (r >> 1);
+      if (k === 0) lat += v; else lon += v;
+    }
+    out.push([lat / 1e5, lon / 1e5]);
+  }
+  return out;
+}
+function geom(dir) {
+  if (!dir._pts) {
+    const pts = decode(dir.p), cum = [0];
+    for (let i = 1; i < pts.length; i++)
+      cum.push(cum[i - 1] + Math.hypot((pts[i][1] - pts[i - 1][1]) * KX, (pts[i][0] - pts[i - 1][0]) * KY));
+    dir._pts = pts; dir._cum = cum;
+  }
+  return dir;
+}
+function posAt(dir, off) {
+  const { _pts: p, _cum: c } = geom(dir);
+  let lo = 0, hi = c.length - 1;
+  if (off <= 0) lo = 0; else if (off >= c[hi]) lo = hi - 1;
+  else { while (hi - lo > 1) { const m = (lo + hi) >> 1; if (c[m] <= off) lo = m; else hi = m; } }
+  const a = p[lo], b = p[Math.min(lo + 1, p.length - 1)], L = c[lo + 1] - c[lo] || 1;
+  const f = Math.max(0, Math.min(1, (off - c[lo]) / L));
+  const az = (Math.atan2((b[1] - a[1]) * KX, (b[0] - a[0]) * KY) * 180 / Math.PI + 360) % 360;
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, az];
+}
+// 把一個座標投影到路線上，回傳里程（公尺）與離線形的距離
+function project(dir, lat, lon) {
+  const { _pts: p, _cum: c } = geom(dir);
+  const px = lon * KX, py = lat * KY; let best = Infinity, off = 0;
+  for (let i = 0; i < p.length - 1; i++) {
+    const ax = p[i][1] * KX, ay = p[i][0] * KY, dx = p[i + 1][1] * KX - ax, dy = p[i + 1][0] * KY - ay;
+    const L = dx * dx + dy * dy, t = L ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / L)) : 0;
+    const d = Math.hypot(px - ax - t * dx, py - ay - t * dy);
+    if (d < best) { best = d; off = c[i] + t * Math.sqrt(L); }
+  }
+  return { off, dist: best };
+}
+// 里程 → 表定行車秒數（各站之間線性內插）
+function timeAtOff(dir, off) {
+  const o = dir.o, t = dir.t; let i = 0;
+  while (i < o.length - 2 && o[i + 1] <= off) i++;
+  const span = o[i + 1] - o[i];
+  return t[i] + (span > 0 ? Math.max(0, Math.min(1, (off - o[i]) / span)) : 0) * (t[i + 1] - t[i]);
+}
+function stopIndexAt(dir, off) {
+  let i = 0; while (i < dir.o.length - 1 && dir.o[i + 1] <= off + 25) i++; return i;
+}
+
+/* ---------- 車輛：時刻表推估 ---------- */
+function simBuses(sec, day) {
+  const out = [];
+  for (const r of DATA.routes) for (const dir of r.dirs) {
+    const deps = dir[day]; if (!deps.length) continue;
+    const run = dir.t[dir.t.length - 1];
+    for (const base of [sec, sec + 86400]) {
+      for (const dep of deps) {
+        const e = base - dep * 60;
+        if (e < 0) break;
+        if (e > run) continue;
+        let i = 0; while (i < dir.t.length - 2 && dir.t[i + 1] <= e) i++;
+        const f = (e - dir.t[i]) / ((dir.t[i + 1] - dir.t[i]) || 1);
+        const off = dir.o[i] + f * (dir.o[i + 1] - dir.o[i]);
+        const [lat, lon, az] = posAt(dir, off);
+        out.push({ sim: true, r, dir, lat, lon, az, off, dep, ok: true });
+      }
+    }
+  }
+  return out;
+}
+
+/* ---------- 車輛：TDX GPS ---------- */
+function normalize(rows, at) {
+  const out = [];
+  for (const g of rows) {
+    const r = routeById.get(g.RouteUID), p = g.BusPosition;
+    if (!r || !p || !(p.PositionLat > 20) || !(p.PositionLon > 100)) continue;
+    const t = Date.parse(g.GPSTime);
+    if (at - t > 15 * 60000) continue;               // 太久沒回報的車不畫
+    const dir = r.dirs.find(d => d.d === g.Direction) || r.dirs[0];
+    out.push({ plate: g.PlateNumb, r, dir, lat: p.PositionLat, lon: p.PositionLon, az: g.Azimuth, speed: g.Speed,
+      t, ok: g.DutyStatus !== 2 && (g.BusStatus == null || g.BusStatus === 0) });
+  }
+  return out;
+}
+const key = () => { const id = store.get("tdx.id"), sec = store.get("tdx.secret"); return id && sec ? { id, sec } : null; };
+let tokenCache = null;
+async function token() {
+  const k = key(); if (!k) return null;
+  if (tokenCache && tokenCache.exp > Date.now() + 60000) return tokenCache.v;
+  const res = await fetch(TDX_AUTH, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "client_credentials", client_id: k.id, client_secret: k.sec }) });
+  if (!res.ok) throw new Error("TDX 金鑰驗證失敗（" + res.status + "）");
+  const j = await res.json();
+  tokenCache = { v: j.access_token, exp: Date.now() + j.expires_in * 1000 };
+  return tokenCache.v;
+}
+async function tdx(path) {
+  const tok = await token();
+  const res = await fetch(TDX + path, tok ? { headers: { authorization: "Bearer " + tok } } : {});
+  if (res.status === 429) throw new Error(tok ? "TDX 查詢太頻繁，稍後再試" : "今天的免金鑰查詢次數（每個網路位址 20 次）已用完");
+  if (!res.ok) throw new Error("TDX 回應 " + res.status);
+  return res.json();
+}
+const GPS_Q = "RealTimeByFrequency/City/Taichung?%24select=PlateNumb,RouteUID,Direction,BusPosition,Speed,Azimuth,DutyStatus,BusStatus,GPSTime&%24format=JSON";
+async function fetchGps(manual) {
+  if (S.fetching) return;
+  const snap = new URLSearchParams(location.search).get("snapshot");   // 開發用：讀本機快照檔
+  if (!manual && !key() && !snap) {
+    try {
+      const c = JSON.parse(store.get("gps.cache") || "null");
+      if (c && Date.now() - c.at < ANON_CACHE_MS) { S.gps = normalize(c.rows, c.at); S.gpsAt = c.at; S.gpsErr = ""; afterGps(); return; }
+    } catch {}
+  }
+  S.fetching = true; drawStatus();
+  try {
+    const rows = snap ? await (await fetch(snap)).json() : await tdx(GPS_Q);
+    const at = snap ? Math.max(...rows.map(g => Date.parse(g.GPSTime))) : Date.now();
+    S.gps = normalize(rows, at); S.gpsAt = at; S.gpsErr = "";
+    if (!snap) store.set("gps.cache", JSON.stringify({ at, rows }));
+  } catch (e) {
+    S.gpsErr = e.message === "Failed to fetch" ? "連不上 TDX" : e.message;
+  }
+  S.fetching = false; afterGps();
+}
+function afterGps() {
+  if (!S.gps.length && S.gpsErr && S.mode === "gps") {
+    banner(`${esc(S.gpsErr)}，暫時無法顯示 GPS 位置。<button id="b-sim">改看時刻表推估</button>　<button id="b-key">設定 TDX 金鑰</button>`);
+    $("#b-sim").onclick = () => setMode("sim"); $("#b-key").onclick = openKey;
+  } else if (S.mode === "gps") banner("");
+  refresh();
+}
+async function fetchEta() {
+  const r = S.sel; if (!r || S.mode !== "gps" || !key()) return;
+  const k = r.id;
+  try {
+    const rows = await tdx(`EstimatedTimeOfArrival/City/Taichung/${encodeURIComponent(r.n)}?%24filter=${encodeURIComponent(`RouteUID eq '${r.id}'`)}&%24select=Direction,StopSequence,EstimateTime,StopStatus,NextBusTime,PlateNumb&%24format=JSON`);
+    if (S.sel !== r) return;
+    const m = new Map(); for (const e of rows) m.set(e.Direction + ":" + e.StopSequence, e);
+    S.eta = m; S.etaKey = k; drawRoute();
+  } catch {}
+}
+
+/* ---------- 到站時間 ---------- */
+// 回傳 {txt, cls, src}；src: tdx 官方預估 / gps 依位置推估 / sch 表定推估
+function etaFor(r, dir, i, busesOnDir) {
+  const ctx = nowCtx();
+  if (S.mode === "gps") {
+    const e = S.eta && S.etaKey === r.id && S.eta.get(dir.d + ":" + dir.q[i]);
+    if (e) {
+      if (e.EstimateTime != null) {
+        const m = Math.floor(e.EstimateTime / 60);
+        return m < 1 ? { txt: "進站中", cls: "soon", src: "tdx" } : m < 3 ? { txt: "即將到站", cls: "soon", src: "tdx" } : { txt: m + " 分", cls: m <= 10 ? "near" : "", src: "tdx" };
+      }
+      if (e.StopStatus === 1) return { txt: e.NextBusTime ? e.NextBusTime.slice(11, 16) + " 發車" : "未發車", cls: "", src: "tdx" };
+      return { txt: ({ 2: "不停靠", 3: "末班已過", 4: "今日未營運" })[e.StopStatus] || "—", cls: "", src: "tdx" };
+    }
+    let best = Infinity;
+    for (const b of busesOnDir) if (b.ok && b.off <= dir.o[i] + 25 && b.dist < 400) best = Math.min(best, dir.t[i] - timeAtOff(dir, b.off));
+    if (best < Infinity) {
+      const m = Math.round(best / 60);
+      return m < 1 ? { txt: "進站中", cls: "soon", src: "gps" } : { txt: "約 " + m + " 分", cls: m <= 3 ? "soon" : m <= 10 ? "near" : "", src: "gps" };
+    }
+  }
+  const deps = dir[ctx.day];
+  for (const base of [0, 1440]) for (const dep of deps) {
+    const at = (dep + base) * 60 + dir.t[i];
+    if (at >= ctx.sec) {
+      const m = Math.round((at - ctx.sec) / 60);
+      return { txt: (S.mode === "sim" && m <= 20 ? m + " 分" : hhmm(at / 60)), cls: S.mode === "sim" && m <= 3 ? "soon" : S.mode === "sim" && m <= 10 ? "near" : "", src: "sch", at };
+    }
+  }
+  return { txt: "無班次", cls: "", src: "sch" };
+}
+
+/* ---------- 地圖 ---------- */
+const map = L.map("map", { preferCanvas: true, zoomControl: false }).setView([24.1630, 120.6480], 13);
+L.control.zoom({ position: "bottomright" }).addTo(map);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>｜公車資料：<a href="https://tdx.transportdata.tw/">交通部 TDX</a>',
+}).addTo(map);
+const routeLayer = L.layerGroup().addTo(map), stopLayer = L.layerGroup().addTo(map);
+const legend = L.control({ position: "topright" });
+legend.onAdd = () => { const d = L.DomUtil.create("div", "legend"); d.id = "legend"; return d; };
+legend.addTo(map);
+
+const canvas = L.DomUtil.create("canvas", "buscanvas leaflet-zoom-hide", map.getPanes().overlayPane);
+const cx = canvas.getContext("2d");
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const COL = { all: css("--live"), d0: css("--d0"), d1: css("--d1"), off: "#8b9690", sim: "#6b4fc9" };
+function busColor(b) {
+  if (!b.ok) return COL.off;
+  if (S.sel) return b.dir.d === 1 ? COL.d1 : COL.d0;
+  return b.sim ? COL.sim : COL.all;
+}
+function drawBuses() {
+  const size = map.getSize(), dpr = window.devicePixelRatio || 1;
+  if (canvas.width !== size.x * dpr || canvas.height !== size.y * dpr) {
+    canvas.width = size.x * dpr; canvas.height = size.y * dpr; canvas.style.width = size.x + "px"; canvas.style.height = size.y + "px";
+  }
+  L.DomUtil.setPosition(canvas, map.containerPointToLayerPoint([0, 0]));
+  cx.setTransform(dpr, 0, 0, dpr, 0, 0); cx.clearRect(0, 0, size.x, size.y);
+  const z = map.getZoom(), rad = Math.max(S.sel ? 6.5 : 0, z >= 15 ? 7 : z >= 13 ? 5.5 : z >= 11 ? 4 : 3), label = z >= 15 || (S.sel && z >= 12);
+  cx.font = "600 11px -apple-system,'PingFang TC',sans-serif"; cx.textBaseline = "middle";
+  for (const b of S.buses) {
+    const p = map.latLngToContainerPoint([b.lat, b.lon]);
+    if (p.x < -30 || p.y < -30 || p.x > size.x + 30 || p.y > size.y + 30) { b._p = null; continue; }
+    b._p = p;
+    const col = busColor(b);
+    if (b.az != null && rad >= 4) {
+      const a = (b.az - 90) * Math.PI / 180;
+      cx.beginPath();
+      cx.moveTo(p.x + Math.cos(a) * (rad + 5), p.y + Math.sin(a) * (rad + 5));
+      cx.lineTo(p.x + Math.cos(a + 2.2) * rad, p.y + Math.sin(a + 2.2) * rad);
+      cx.lineTo(p.x + Math.cos(a - 2.2) * rad, p.y + Math.sin(a - 2.2) * rad);
+      cx.closePath(); cx.fillStyle = col; cx.fill();
+    }
+    cx.beginPath(); cx.arc(p.x, p.y, rad, 0, 6.2832); cx.fillStyle = col; cx.fill();
+    cx.lineWidth = 1.5; cx.strokeStyle = "#fff"; cx.stroke();
+    if (label) {
+      const txt = S.sel ? (b.plate || hhmm(b.dep) + " 發") : b.r.n, w = cx.measureText(txt).width + 8;
+      cx.fillStyle = "rgba(255,255,255,.92)"; cx.beginPath(); cx.roundRect(p.x + rad + 3, p.y - 8, w, 16, 4); cx.fill();
+      cx.fillStyle = "#17211d"; cx.fillText(txt, p.x + rad + 7, p.y + .5);
+    }
+  }
+}
+map.on("move zoomend resize", drawBuses);
+new ResizeObserver(() => map.invalidateSize()).observe($("#map"));
+map.on("click", e => {
+  let best = null, bd = 16;
+  for (const b of S.buses) if (b._p) { const d = Math.hypot(b._p.x - e.containerPoint.x, b._p.y - e.containerPoint.y); if (d < bd) { bd = d; best = b; } }
+  if (best) busPopup(best);
+});
+function busPopup(b) {
+  const to = DATA.stops[b.dir.s[b.dir.s.length - 1]][0];
+  const body = b.sim
+    ? `<div class="m">表定 ${hhmm(b.dep)} 發車${b.dir.mir || b.dir.est ? "（班次為推估）" : ""}</div><div class="m">位置依時刻表推估，非實際 GPS</div>`
+    : `<div>車牌 ${esc(b.plate)}　時速 ${b.speed ?? "–"} km/h</div><div class="m">GPS 時間 ${new Date(b.t).toLocaleTimeString("zh-TW", { timeZone: "Asia/Taipei", hour12: false })}${b.ok ? "" : "　非營運狀態"}</div>`;
+  const el = L.DomUtil.create("div", "pop");
+  el.innerHTML = `<b>${esc(b.r.n)}</b>　往 ${esc(to)}${body}` + (S.sel === b.r ? "" : `<button>查看路線</button>`);
+  const btn = $("button", el); if (btn) btn.onclick = () => { map.closePopup(); selectRoute(b.r, b.dir.d); };
+  L.popup({ offset: [0, -4] }).setLatLng([b.lat, b.lon]).setContent(el).openOn(map);
+}
+function drawRouteOnMap(fit) {
+  routeLayer.clearLayers(); stopLayer.clearLayers();
+  const r = S.sel; if (!r) return;
+  const cur = r.dirs.find(d => d.d === S.selDir) || r.dirs[0];
+  for (const d of r.dirs) if (d !== cur) L.polyline(geom(d)._pts, { color: "#9aa5a0", weight: 3, opacity: .7, interactive: false }).addTo(routeLayer);
+  const col = cur.d === 1 ? COL.d1 : COL.d0;
+  const line = L.polyline(geom(cur)._pts, { color: col, weight: 5, opacity: .85, interactive: false }).addTo(routeLayer);
+  cur.s.forEach((si, i) => {
+    const st = DATA.stops[si];
+    L.circleMarker([st[2], st[1]], { radius: i === S.hiStop ? 8 : 3.5, color: col, weight: 2, fillColor: "#fff", fillOpacity: 1 })
+      .bindTooltip(`${i + 1}. ${esc(st[0])}`, { direction: "top" })
+      .on("click", ev => { L.DomEvent.stop(ev); S.hiStop = i; drawRouteOnMap(); const li = $(`ol.stops li[data-i="${i}"]`); if (li) li.scrollIntoView({ block: "center", behavior: "smooth" }); })
+      .addTo(stopLayer);
+  });
+  if (fit) map.fitBounds(line.getBounds(), { padding: [30, 30] });
+}
+
+/* ---------- 側欄 ---------- */
+function badge(n) { return `<span class="badge${n.length > 5 ? " long" : ""}">${esc(n)}</span>`; }
+function drawRouteList() {
+  const q = $("#rq").value.trim().toLowerCase();
+  const rows = DATA.routes.filter(r => !q || r.n.toLowerCase().includes(q) || r.from.includes(q) || r.to.includes(q));
+  rows.sort((a, b) => (b.n.toLowerCase().startsWith(q) - a.n.toLowerCase().startsWith(q)));
+  $("#rl").innerHTML = rows.length ? rows.map(r =>
+    `<button class="item" data-r="${r.id}">${badge(r.n)}<span class="main"><div>${esc(r.from)} ⇄ ${esc(r.to)}</div><div class="sub">${esc(r.ops.join("、"))}</div></span></button>`).join("")
+    : `<div class="hint">找不到符合的路線。</div>`;
+}
+$("#rl").onclick = e => { const b = e.target.closest("[data-r]"); if (b) selectRoute(routeById.get(b.dataset.r)); };
+$("#rq").oninput = drawRouteList;
+
+function selectRoute(r, d) {
+  S.sel = r; S.selDir = d ?? r.dirs[0].d; S.hiStop = -1; S.eta = null; S.schedDay = null;
+  setTab("routes");
+  $("#routelist").hidden = true; $("#routedetail").hidden = false; $("#p-routes").scrollTop = 0;
+  refresh(); drawRouteOnMap(true); fetchEta();
+}
+function clearRoute() {
+  S.sel = null; S.eta = null;
+  $("#routelist").hidden = false; $("#routedetail").hidden = true;
+  routeLayer.clearLayers(); stopLayer.clearLayers(); refresh();
+}
+function busesOn(r, dir) {
+  const out = [];
+  for (const b of S.buses) if (b.r === r && b.dir === dir) {
+    if (b.sim) { b.dist = 0; out.push(b); continue; }
+    const p = project(dir, b.lat, b.lon); b.off = p.off; b.dist = p.dist; out.push(b);
+  }
+  return out;
+}
+function drawRoute() {
+  const r = S.sel; if (!r) return;
+  const dir = r.dirs.find(d => d.d === S.selDir) || r.dirs[0], ctx = nowCtx();
+  const on = busesOn(r, dir), atStop = new Map();
+  for (const b of on) if (b.dist < 400) { const i = stopIndexAt(dir, b.off); (atStop.get(i) || atStop.set(i, []).get(i)).push(b); }
+  let src = new Set();
+  const lis = dir.s.map((si, i) => {
+    const e = etaFor(r, dir, i, on); src.add(e.src);
+    const bs = (atStop.get(i) || []).map(b => `<span class="bus">🚌 ${esc(b.plate || hhmm(b.dep) + " 發")}</span>`).join("");
+    return `<li data-i="${i}"><span class="eta ${e.cls}">${esc(e.txt)}</span><span class="rail"></span><span class="nm">${esc(DATA.stops[si][0])}${bs}</span></li>`;
+  }).join("");
+  const day = S.schedDay || ctx.day, deps = dir[day], nowMin = ctx.sec / 60;
+  const nextIx = day === ctx.day ? deps.findIndex(v => v >= nowMin) : -1;
+  const times = deps.length ? deps.map((v, i) => `<span class="${day === ctx.day && v < nowMin ? "past" : ""}${i === nextIx ? " next" : ""}">${hhmm(v)}</span>`).join("") : "";
+  const srcNote = S.mode === "sim" ? "各站時間依起點發車時刻推估" : src.has("tdx") ? "TDX 官方預估到站" : src.has("gps") ? "依 GPS 位置與表定行車時間推估；無車輛時顯示表定時間" : "目前沒有行駛中的車輛，顯示表定時間";
+  const notes = [];
+  if (dir.mir) notes.push("TDX 沒有公布這個方向的發車時刻，下列班次由對向班表加上行車時間推估。");
+  if (dir.est) notes.push("這條路線只公布班距，班次依班距推估。");
+  if (S.mode === "gps" && !on.length) notes.push("這個方向目前沒有回報 GPS 的車輛。");
+  const html = `
+    <div class="rhead" style="--rc:${dir.d === 1 ? "var(--d1)" : "var(--d0)"}">
+      <div class="top"><button class="back" id="back">← 路線</button><h2>${esc(r.n)}</h2><span class="sp"></span><span class="hint" style="padding:0">${on.length} ${S.mode === "sim" ? "班" : "輛"}</span></div>
+      <div class="ft">${esc(r.ops.join("、"))}</div>
+      <div class="dirs">${r.dirs.map(d => `<button data-d="${d.d}" aria-pressed="${d === dir}">往 ${esc(DATA.stops[d.s[d.s.length - 1]][0])}</button>`).join("")}</div>
+    </div>
+    ${notes.map(n => `<div class="note">${n}</div>`).join("")}
+    <div class="sect">站序與到站</div><div class="hint" style="padding-top:0">${srcNote}</div>
+    <ol class="stops" style="--rc:${dir.d === 1 ? "var(--d1)" : "var(--d0)"}">${lis}</ol>
+    <div class="sect">起點發車時刻<span class="sp"></span><select id="schedday"><option value="wk"${day === "wk" ? " selected" : ""}>平日</option><option value="we"${day === "we" ? " selected" : ""}>假日</option></select></div>
+    ${times ? `<div class="times">${times}</div>` : `<div class="hint">TDX 沒有這個方向${day === "wk" ? "平日" : "假日"}的班表。</div>`}`;
+  if (!setHtml($("#routedetail"), html)) return;
+  $("#back").onclick = clearRoute;
+  $("#schedday").onchange = e => { S.schedDay = e.target.value; drawRoute(); };
+}
+$("#routedetail").addEventListener("click", e => {
+  const d = e.target.closest(".dirs [data-d]");
+  if (d) { S.selDir = +d.dataset.d; S.hiStop = -1; drawRoute(); drawRouteOnMap(true); drawBuses(); return; }
+  const li = e.target.closest("ol.stops li");
+  if (li) {
+    S.hiStop = +li.dataset.i; const dir = S.sel.dirs.find(x => x.d === S.selDir) || S.sel.dirs[0], st = DATA.stops[dir.s[S.hiStop]];
+    drawRouteOnMap(); map.setView([st[2], st[1]], Math.max(map.getZoom(), 16));
+  }
+});
+
+let stopMarker = null;
+function drawStops() {
+  const q = $("#sq").value.trim();
+  if (!q) { setHtml($("#sl"), `<div class="hint">輸入站牌名稱，查看經過的路線與下一班車。</div>`); return; }
+  if (stopNames.has(q) && S.stopSel === q) return drawStopDetail(q);
+  const names = [...stopNames.keys()].filter(n => n.includes(q)).sort((a, b) => (a.indexOf(q) - b.indexOf(q)) || a.length - b.length || a.localeCompare(b, "zh-Hant")).slice(0, 80);
+  setHtml($("#sl"), names.length ? names.map(n => `<button class="item" data-n="${esc(n)}"><span class="main"><div>${esc(n)}</div><div class="sub">${new Set(stopNames.get(n).map(x => x.r.n)).size} 條路線</div></span></button>`).join("")
+    : `<div class="hint">找不到符合的站牌。</div>`);
+}
+function drawStopDetail(n) {
+  const list = stopNames.get(n), rows = list.map(x => ({ ...x, e: etaFor(x.r, x.dir, x.i, S.mode === "gps" ? busesOn(x.r, x.dir) : []) }));
+  const rank = e => e.src === "sch" ? (e.at ?? 9e9) : e.txt.includes("進站") || e.txt.includes("即將") ? 0 : (parseInt(e.txt.replace(/\D/g, "")) || 0) * 60 + nowCtx().sec;
+  rows.sort((a, b) => rank(a.e) - rank(b.e));
+  setHtml($("#sl"), `<div class="sect">${esc(n)}　·　${rows.length} 個路線方向</div>` + rows.map(x =>
+    `<button class="item" data-r="${x.r.id}" data-d="${x.dir.d}" data-i="${x.i}">${badge(x.r.n)}<span class="main"><div>往 ${esc(DATA.stops[x.dir.s[x.dir.s.length - 1]][0])}</div><div class="sub">第 ${x.i + 1} 站／共 ${x.dir.s.length} 站</div></span><span class="right">${esc(x.e.txt)}<small>${x.e.src === "tdx" ? "官方預估" : x.e.src === "gps" ? "GPS 推估" : "表定推估"}</small></span></button>`).join(""));
+  const st = DATA.stops[list[0].dir.s[list[0].i]];
+  if (stopMarker) stopMarker.remove();
+  stopMarker = L.circleMarker([st[2], st[1]], { radius: 10, color: "#b42318", weight: 3, fillOpacity: .15 }).bindTooltip(esc(n), { permanent: true, direction: "top" }).addTo(map);
+}
+$("#sq").oninput = () => { S.stopSel = null; drawStops(); };
+$("#sl").onclick = e => {
+  const n = e.target.closest("[data-n]");
+  if (n) { S.stopSel = n.dataset.n; $("#sq").value = S.stopSel; drawStopDetail(S.stopSel); const x = stopNames.get(S.stopSel)[0], st = DATA.stops[x.dir.s[x.i]]; map.setView([st[2], st[1]], 16); return; }
+  const r = e.target.closest("[data-r]");
+  if (r) { selectRoute(routeById.get(r.dataset.r), +r.dataset.d); S.hiStop = +r.dataset.i; drawRouteOnMap(); const li = $(`ol.stops li[data-i="${S.hiStop}"]`); if (li) li.scrollIntoView({ block: "center" }); }
+};
+
+function drawBusTab() {
+  const by = new Map();
+  for (const b of S.buses) if (b.ok) by.set(b.r, (by.get(b.r) || 0) + 1);
+  const rows = [...by].sort((a, b) => b[1] - a[1]);
+  const total = S.buses.filter(b => b.ok).length, idle = S.buses.length - total;
+  setHtml($("#p-buses"), `<div class="sect">${S.mode === "gps" ? "回報 GPS 的營運車輛" : "表定行駛中的班次"}　${total} 輛　·　${rows.length} 條路線</div>` +
+    (idle ? `<div class="hint">另有 ${idle} 輛為非營運狀態（灰色）。</div>` : "") +
+    (rows.length ? rows.map(([r, n]) => `<button class="item" data-r="${r.id}">${badge(r.n)}<span class="main"><div class="sub">${esc(r.from)} ⇄ ${esc(r.to)}</div></span><span class="right">${n} 輛</span></button>`).join("") : `<div class="hint">目前沒有車輛資料。</div>`));
+}
+$("#p-buses").onclick = e => { const b = e.target.closest("[data-r]"); if (b) selectRoute(routeById.get(b.dataset.r)); };
+
+function setTab(t) {
+  S.tab = t;
+  document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === t));
+  document.querySelectorAll(".pane").forEach(p => p.classList.toggle("on", p.id === "p-" + t));
+  if (t !== "stops" && stopMarker) { stopMarker.remove(); stopMarker = null; }
+  if (t === "buses") drawBusTab();
+  if (t === "stops") drawStops();
+}
+document.querySelector(".tabs").onclick = e => { const b = e.target.closest("[data-tab]"); if (b) setTab(b.dataset.tab); };
+
+/* ---------- 狀態列 ---------- */
+function banner(html) { const b = $("#banner"); b.innerHTML = html; b.classList.toggle("on", !!html); map.invalidateSize(); }
+function drawStatus() {
+  const chip = $("#status"), txt = $("#statustext");
+  chip.className = "chip";
+  $("#refresh").hidden = S.mode !== "gps";
+  if (S.mode === "sim") { txt.textContent = `時刻表推估 · ${S.buses.length} 班行駛中`; chip.classList.add("stale"); return; }
+  if (S.fetching) { txt.textContent = "讀取 GPS…"; return; }
+  if (!S.gpsAt) { txt.textContent = S.gpsErr || "尚無 GPS 資料"; chip.classList.add("err"); return; }
+  const age = Date.now() - S.gpsAt, t = new Date(S.gpsAt).toLocaleTimeString("zh-TW", { timeZone: "Asia/Taipei", hour12: false });
+  const ago = age < 60000 ? "" : `（${Math.floor(age / 60000)} 分鐘前）`;
+  txt.textContent = `${S.buses.filter(b => b.ok).length} 輛 · GPS ${t}${ago}` + (key() ? " · 自動更新" : "");
+  if (age > STALE_MS) chip.classList.add("stale");
+  if (S.gpsErr) { chip.classList.add("err"); chip.title = S.gpsErr; } else chip.title = "";
+}
+function drawLegend() {
+  $("#legend").innerHTML = S.sel
+    ? S.sel.dirs.map(d => `<div><i style="background:${d.d === 1 ? COL.d1 : COL.d0}"></i>往 ${esc(DATA.stops[d.s[d.s.length - 1]][0])}</div>`).join("")
+    : S.mode === "gps" ? `<div><i style="background:${COL.all}"></i>營運中（GPS）</div><div><i style="background:${COL.off}"></i>非營運</div>`
+      : `<div><i style="background:${COL.sim}"></i>表定班次（推估位置）</div>`;
+}
+
+/* ---------- 主流程 ---------- */
+function refresh() {
+  const ctx = nowCtx();
+  let all = S.mode === "gps" ? S.gps : simBuses(ctx.sec, ctx.day);
+  S.buses = S.sel ? all.filter(b => b.r === S.sel) : all;
+  drawBuses(); drawStatus(); drawLegend();
+  if (S.sel) drawRoute();
+  if (S.tab === "buses") drawBusTab();
+  if (S.tab === "stops" && S.stopSel) drawStopDetail(S.stopSel);
+  if (S.mode === "sim") { $("#simclock").textContent = hhmm(ctx.sec / 60); if (document.activeElement !== $("#t-range")) $("#t-range").value = Math.floor(ctx.sec / 60); }
+}
+function setMode(m) {
+  S.mode = m; document.body.classList.toggle("sim", m === "sim");
+  $("#m-gps").setAttribute("aria-pressed", m === "gps"); $("#m-sim").setAttribute("aria-pressed", m === "sim");
+  if (m === "sim") { banner(""); S.simLive = true; S.playing = false; S.simDay = dayType(taipei().dow); $("#t-day").value = S.simDay; syncTimebar(); }
+  map.closePopup(); map.invalidateSize();
+  if (m === "gps") { if (!S.gps.length || Date.now() - S.gpsAt > STALE_MS) fetchGps(false); else afterGps(); fetchEta(); }
+  else refresh();
+}
+function syncTimebar() {
+  $("#t-now").setAttribute("aria-pressed", S.simLive);
+  $("#t-play").textContent = S.playing ? "⏸ 暫停" : "▶ 播放";
+}
+$("#m-gps").onclick = () => setMode("gps");
+$("#m-sim").onclick = () => setMode("sim");
+$("#refresh").onclick = () => fetchGps(true);
+$("#t-now").onclick = () => { S.simLive = true; S.playing = false; S.simDay = dayType(taipei().dow); $("#t-day").value = S.simDay; syncTimebar(); refresh(); };
+$("#t-day").onchange = e => { S.simDay = e.target.value; refresh(); };
+$("#t-range").oninput = e => { S.simLive = false; S.simT = +e.target.value * 60; syncTimebar(); refresh(); };
+$("#t-play").onclick = () => { if (S.simLive) { S.simT = taipei().sec; S.simLive = false; } S.playing = !S.playing; syncTimebar(); };
+
+function openKey() {
+  const k = key(); $("#k-id").value = k ? k.id : ""; $("#k-secret").value = k ? k.sec : ""; $("#keymsg").textContent = "";
+  $("#keydlg").showModal();
+}
+$("#keybtn").onclick = openKey;
+$("#k-clear").onclick = () => { store.del("tdx.id"); store.del("tdx.secret"); tokenCache = null; $("#k-id").value = $("#k-secret").value = ""; $("#keymsg").textContent = "已清除金鑰。"; drawStatus(); };
+$("#k-save").onclick = async () => {
+  const id = $("#k-id").value.trim(), sec = $("#k-secret").value.trim(), msg = $("#keymsg");
+  if (!id || !sec) { msg.textContent = "請填入 Client ID 與 Client Secret。"; return; }
+  const old = key(); store.set("tdx.id", id); store.set("tdx.secret", sec); tokenCache = null; msg.textContent = "測試中…";
+  try { await token(); msg.textContent = "金鑰可用，開始自動更新。"; $("#keydlg").close(); if (S.mode === "gps") { fetchGps(true); fetchEta(); } }
+  catch (e) {
+    if (old) { store.set("tdx.id", old.id); store.set("tdx.secret", old.sec); } else { store.del("tdx.id"); store.del("tdx.secret"); }
+    tokenCache = null; msg.textContent = e.message === "Failed to fetch" ? "連不上 TDX，金鑰未儲存。" : e.message + "，金鑰未儲存。";
+  }
+};
+
+let lastTick = performance.now(), lastPoll = Date.now(), lastEta = Date.now();
+function tick() {
+  const now = performance.now(), dt = (now - lastTick) / 1000; lastTick = now;
+  const t = taipei();
+  $("#clock").textContent = `${t.date} ${hhmm(t.sec / 60)}:${String(t.sec % 60).padStart(2, "0")}`;
+  if (S.mode === "sim") {
+    if (S.playing) { S.simT += dt * +$("#t-speed").value; if (S.simT > 1500 * 60) { S.simT = 1500 * 60; S.playing = false; syncTimebar(); } }
+    if (S.playing || S.simLive) refresh();
+  } else {
+    drawStatus();
+    if (key() && !document.hidden) {
+      if (Date.now() - lastPoll > POLL_MS) { lastPoll = Date.now(); fetchGps(true); }
+      if (Date.now() - lastEta > ETA_MS) { lastEta = Date.now(); fetchEta(); }
+    }
+  }
+}
+
+(async function init() {
+  try { DATA = await (await fetch("bus.json")).json(); }
+  catch { $("#statustext").textContent = "路線資料載入失敗"; $("#status").classList.add("err"); return; }
+  for (const r of DATA.routes) {
+    routeById.set(r.id, r);
+    for (const dir of r.dirs) dir.s.forEach((si, i) => {
+      const n = DATA.stops[si][0];
+      (stopNames.get(n) || stopNames.set(n, []).get(n)).push({ r, dir, i });
+    });
+  }
+  drawRouteList();
+  window.__app = { S, DATA, selectRoute, setMode, map };
+  await fetchGps(false);
+  let playT = 0;
+  (function frame(ts) { requestAnimationFrame(frame); if (S.mode === "sim" && S.playing) { if (ts - playT > 100) { playT = ts; tick(); } } })(0);
+  setInterval(() => { if (!(S.mode === "sim" && S.playing)) tick(); }, 1000);
+  tick();
+})();
+</script>
+</body>
+</html>
