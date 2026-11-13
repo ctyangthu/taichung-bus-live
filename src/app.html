@@ -429,7 +429,7 @@ function drawBuses() {
   }
   L.DomUtil.setPosition(canvas, map.containerPointToLayerPoint([0, 0]));
   cx.setTransform(dpr, 0, 0, dpr, 0, 0); cx.clearRect(0, 0, size.x, size.y);
-  const z = map.getZoom(), w = Math.max(S.sel ? 22 : 0, z >= 15 ? 26 : z >= 13 ? 20 : z >= 11 ? 15 : 11), label = z >= 15 || (S.sel && z >= 12);
+  const z = map.getZoom(), w = Math.max(S.sel ? 28 : 0, z >= 15 ? 34 : z >= 13 ? 26 : z >= 11 ? 19 : 14), label = z >= 15 || (S.sel && z >= 12);
   cx.font = "600 11px -apple-system,'PingFang TC',sans-serif"; cx.textBaseline = "middle";
   for (const b of S.buses) {
     const p = map.latLngToContainerPoint([b.lat, b.lon]);
@@ -474,7 +474,7 @@ function drawBusIcon(x, y, w, col, az) {
 map.on("move zoomend resize", drawBuses);
 new ResizeObserver(() => map.invalidateSize()).observe($("#map"));
 map.on("click", e => {
-  let best = null, bd = 16;
+  let best = null, bd = 20;
   for (const b of S.buses) if (b._p) { const d = Math.hypot(b._p.x - e.containerPoint.x, b._p.y - e.containerPoint.y); if (d < bd) { bd = d; best = b; } }
   if (best) busPopup(best);
 });
