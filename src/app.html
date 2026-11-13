@@ -416,7 +416,7 @@ legend.addTo(map);
 const canvas = L.DomUtil.create("canvas", "buscanvas leaflet-zoom-hide", map.getPanes().overlayPane);
 const cx = canvas.getContext("2d");
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-const COL = { all: css("--live"), d0: css("--d0"), d1: css("--d1"), off: "#8b9690", sim: "#6b4fc9" };
+const COL = { all: "#111", d0: css("--d0"), d1: css("--d1"), off: "#9aa5a0", sim: "#111" };
 function busColor(b) {
   if (!b.ok) return COL.off;
   if (S.sel) return b.dir.d === 1 ? COL.d1 : COL.d0;
